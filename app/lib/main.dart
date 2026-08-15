@@ -1,7 +1,8 @@
-import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+
+import 'services/crypto_service.dart';
 
 void main() {
   runApp(const EasyCryptoWatchApp());
@@ -36,40 +37,52 @@ class CryptoHomeScreen extends StatefulWidget {
 }
 
 class _CryptoHomeScreenState extends State<CryptoHomeScreen> {
+  final CryptoService cryptoService = CryptoService();
+
   double? bitcoinPrice;
   String statusText = 'Warte auf Kursdaten …';
+
+  Timer? refreshTimer;
 
   @override
   void initState() {
     super.initState();
+
     loadBitcoinPrice();
+
+    refreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => loadBitcoinPrice(),
+    );
   }
 
   Future<void> loadBitcoinPrice() async {
     try {
-      final response = await http.get(
-        Uri.parse(
-          'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
-        ),
-      );
+      final price = await cryptoService.fetchBitcoinUsdPrice();
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        setState(() {
-          bitcoinPrice = (data['bitcoin']['usd'] as num).toDouble();
-          statusText = 'BTC-Kurs erfolgreich geladen';
-        });
-      } else {
-        setState(() {
-          statusText = 'Fehler beim Laden: ${response.statusCode}';
-        });
+      if (!mounted) {
+        return;
       }
-    } catch (e) {
+
+      setState(() {
+        bitcoinPrice = price;
+        statusText = 'BTC-Kurs aktuell';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         statusText = 'Keine Kursdaten verfügbar';
       });
     }
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -108,7 +121,9 @@ class _CryptoHomeScreenState extends State<CryptoHomeScreen> {
                 const SizedBox(height: 12),
                 Text(
                   statusText,
-                  style: TextStyle(color: Colors.grey.shade400),
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                  ),
                 ),
               ],
             ),
